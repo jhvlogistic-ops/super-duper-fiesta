@@ -1,7 +1,18 @@
-const axios = require("axios");
-
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function parseJsonResponse(res) {
+  const text = await res.text();
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
 }
 
 class LocalWorkerAdapter {
@@ -16,11 +27,34 @@ class LocalWorkerAdapter {
     this.pollMs = Number(opts.pollMs || 1500);
   }
 
-  async getSystemState() {
-    const res = await axios.get(`${this.baseUrl}/api/system/state`, {
-      headers: this.headers,
+  async requestJson(path, opts = {}) {
+    if (!globalThis.fetch) {
+      throw new Error("native_fetch_unavailable");
+    }
+
+    const res = await fetch(`${this.baseUrl}${path}`, {
+      ...opts,
+      headers: {
+        ...this.headers,
+        ...(opts.headers || {}),
+      },
     });
-    return res.data;
+    const data = await parseJsonResponse(res);
+
+    if (!res.ok) {
+      const err = new Error(`request_failed_${res.status}`);
+      err.response = {
+        status: res.status,
+        data,
+      };
+      throw err;
+    }
+
+    return data;
+  }
+
+  async getSystemState() {
+    return this.requestJson("/api/system/state");
   }
 
   async waitUntilAutomationOn(timeoutMs = 30000) {
@@ -58,11 +92,13 @@ class LocalWorkerAdapter {
       supervisorDecision: opts.supervisorDecision || "approve",
     };
 
-    const res = await axios.post(`${this.baseUrl}/api/execute`, payload, {
-      headers: this.headers,
+    return this.requestJson("/api/execute", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
     });
-
-    return res.data;
   }
 
   async runWhenReady(command, opts = {}) {
