@@ -9,3 +9,5 @@ dist/
 *.egg-info/
 node_modules/
 server/.system-state.json
+server/.audit.log
+server/.artifacts/
