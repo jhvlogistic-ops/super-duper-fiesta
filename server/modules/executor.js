@@ -21,12 +21,16 @@ function containsBlockedToken(command = "") {
   );
 }
 
-function writeArtifact(artifact) {
-  const artifactPath = path.join(ARTIFACTS_DIR, `${artifact.execId}.json`);
-  fs.writeFileSync(artifactPath, JSON.stringify(artifact, null, 2), "utf8");
+function resolveShell() {
+  if (process.platform === "win32") {
+    return {
+      bin: "powershell.exe",
+      argsPrefix: ["-NoProfile", "-Command"],
+    };
+  }
   return {
-    ...artifact,
-    artifactPath,
+    bin: "pwsh",
+    argsPrefix: ["-NoProfile", "-Command"],
   };
 }
 
@@ -48,16 +52,49 @@ function runPowerShell({ command, cwd, timeoutSec = 30 }) {
       });
     }
 
+    const shell = resolveShell();
     const startedAt = Date.now();
-    const ps = spawn("powershell", ["-NoProfile", "-Command", command], {
-      cwd,
-      shell: false,
-      windowsHide: true,
-    });
+
+    let ps;
+    try {
+      ps = spawn(shell.bin, [...shell.argsPrefix, command], {
+        cwd,
+        shell: false,
+        windowsHide: true,
+        env: process.env,
+      });
+    } catch (err) {
+      const artifact = {
+        execId: `exec-${Date.now()}`,
+        command,
+        cwd,
+        timeoutSec,
+        startedAt: new Date(startedAt).toISOString(),
+        endedAt: new Date().toISOString(),
+        durationMs: Date.now() - startedAt,
+        ok: false,
+        exitCode: -1,
+        error: err.message,
+        stdout: "",
+        stderr: "",
+      };
+      const artifactPath = path.join(ARTIFACTS_DIR, `${artifact.execId}.json`);
+      fs.writeFileSync(artifactPath, JSON.stringify(artifact, null, 2), "utf8");
+      return resolve({ ...artifact, artifactPath });
+    }
 
     let stdout = "";
     let stderr = "";
     let killed = false;
+    let settled = false;
+
+    const finish = (artifact) => {
+      if (settled) return;
+      settled = true;
+      const artifactPath = path.join(ARTIFACTS_DIR, `${artifact.execId}.json`);
+      fs.writeFileSync(artifactPath, JSON.stringify(artifact, null, 2), "utf8");
+      resolve({ ...artifact, artifactPath });
+    };
 
     const timer = setTimeout(() => {
       killed = true;
@@ -72,9 +109,9 @@ function runPowerShell({ command, cwd, timeoutSec = 30 }) {
       stderr += data.toString();
     });
 
-    ps.on("error", (error) => {
+    ps.on("error", (err) => {
       clearTimeout(timer);
-      resolve(writeArtifact({
+      finish({
         execId: `exec-${Date.now()}`,
         command,
         cwd,
@@ -84,16 +121,16 @@ function runPowerShell({ command, cwd, timeoutSec = 30 }) {
         durationMs: Date.now() - startedAt,
         ok: false,
         exitCode: -1,
-        error: error.message,
+        error: err.message,
         stdout,
         stderr,
-      }));
+      });
     });
 
     ps.on("close", (code) => {
       clearTimeout(timer);
 
-      const artifact = {
+      finish({
         execId: `exec-${Date.now()}`,
         command,
         cwd,
@@ -103,11 +140,10 @@ function runPowerShell({ command, cwd, timeoutSec = 30 }) {
         durationMs: Date.now() - startedAt,
         exitCode: killed ? -9 : code,
         ok: !killed && code === 0,
+        error: killed ? "timeout_killed" : null,
         stdout,
         stderr,
-      };
-
-      resolve(writeArtifact(artifact));
+      });
     });
   });
 }
