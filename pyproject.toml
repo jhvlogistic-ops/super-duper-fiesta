@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm-fallback"
+version = "0.1.0"
+description = "Cliente Python con fallback automatico entre Claude (GitHub Models), Gemini 2.5 Pro y DeepSeek para escribir codigo gratis."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "jhvlogistic-ops" }]
+keywords = ["llm", "ai", "claude", "gemini", "deepseek", "openai", "fallback", "free", "coding"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dotenv = ["python-dotenv>=1.0"]
+dev = [
+    "pytest>=8",
+    "pytest-httpx>=0.30",
+    "python-dotenv>=1.0",
+]
+
+[project.scripts]
+llm-fallback = "llm_fallback.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/jhvlogistic-ops/super-duper-fiesta"
+Repository = "https://github.com/jhvlogistic-ops/super-duper-fiesta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
